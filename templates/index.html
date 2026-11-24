@@ -1,0 +1,1359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script>
+    if (window.location.port === "5500") {
+      const flaskUrl = new URL(window.location.href);
+      flaskUrl.protocol = "http:";
+      flaskUrl.port = "5000";
+      flaskUrl.pathname = "/";
+      flaskUrl.search = "";
+      flaskUrl.hash = "";
+      window.location.replace(flaskUrl.href);
+    }
+  </script>
+  <title>ReviewTrellis — Review Authenticity Detection</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,400&family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            ivory: '#F6F2EA',
+            ink: '#1F2421',
+            muted: '#6F6A60',
+            petrol: '#1F4E5F',
+            'petrol-light': '#DCE8EC',
+            'petrol-dark': '#133642',
+            amber: '#D98E32',
+            'amber-light': '#FDF4E7',
+            'amber-dark': '#AD6C1A',
+            darkslate: '#16222A',
+            bordercol: '#E4DDD0',
+            surface: '#FFFFFF',
+          },
+          fontFamily: {
+            serif: ['Fraunces', 'Georgia', 'serif'],
+            sans: ['DM Sans', 'system-ui', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    /* Custom marquee animation */
+    @keyframes marqueeLeft {
+      0% { transform: translateX(0%); }
+      100% { transform: translateX(-50%); }
+    }
+    @keyframes marqueeRight {
+      0% { transform: translateX(-50%); }
+      100% { transform: translateX(0%); }
+    }
+    .animate-marquee-left {
+      animation: marqueeLeft 38s linear infinite;
+    }
+    .animate-marquee-right {
+      animation: marqueeRight 42s linear infinite;
+    }
+    .animate-marquee-left:hover, .animate-marquee-right:hover {
+      animation-play-state: paused;
+    }
+    /* Subtle fade in for page switches */
+    .page-view {
+      display: none;
+      opacity: 0;
+      transition: opacity 0.25s ease-in-out;
+    }
+    .page-view.active {
+      display: block;
+      opacity: 1;
+    }
+    /* Progress bar animation */
+    @keyframes pulseProgress {
+      0% { width: 12%; }
+      50% { width: 78%; }
+      100% { width: 98%; }
+    }
+    .loading-progress {
+      animation: pulseProgress 1.4s ease-in-out forwards;
+    }
+    /* Smooth transitions */
+    .nav-indicator {
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .metric-bar {
+      width: 0;
+      transition: width 0.6s ease;
+    }
+    [data-algorithm="Linear SVM"] .metric-label {
+      color: #1F4E5F;
+      font-weight: 600;
+    }
+    [data-algorithm="Linear SVM"] .metric-bar {
+      background-color: #1F4E5F;
+    }
+    [data-algorithm="Linear SVM"] .metric-value {
+      color: #1F2421;
+      font-weight: 700;
+    }
+    [data-algorithm="Logistic Regression"] .metric-bar {
+      background-color: #D98E32;
+    }
+    [data-algorithm="Multinomial Naive Bayes"] .metric-bar {
+      background-color: #9A9386;
+    }
+  </style>
+</head>
+<body class="bg-ivory text-ink font-sans antialiased min-h-screen flex flex-col selection:bg-petrol selection:text-white">
+
+  <!-- ========================================== -->
+  <!-- GLOBAL NAVIGATION                          -->
+  <!-- ========================================== -->
+  <header class="sticky top-0 z-50 bg-ivory/95 backdrop-blur-md border-b border-bordercol">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
+      
+      <!-- Brand Logo -->
+      <button onclick="navigateTo('home')" class="group flex items-center gap-3 text-left focus:outline-none">
+        <div class="w-10 h-10 rounded-lg bg-petrol flex items-center justify-center text-white shadow-sm transition-transform group-hover:scale-105">
+          <!-- Trellis / Shield Geometric Mark -->
+          <svg class="w-5 h-5 text-ivory" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2L3 7v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-9-5z"/>
+            <path d="M8 11h8"/>
+            <path d="M12 7v10"/>
+          </svg>
+        </div>
+        <div>
+          <span class="font-serif text-xl font-bold tracking-tight text-ink block leading-none">ReviewTrellis</span>
+          <span class="text-[10px] uppercase font-mono tracking-wider text-muted font-medium mt-1 block">ML Authenticity Radar</span>
+        </div>
+      </button>
+
+      <!-- Center Links with Amber active indicator -->
+      <nav class="hidden md:flex items-center space-x-1 lg:space-x-2">
+        <button id="nav-btn-home" onclick="navigateTo('home')" class="nav-btn relative px-4 py-2 text-sm font-medium text-ink transition-colors hover:text-petrol">
+          Home
+          <span class="nav-indicator absolute bottom-0 left-4 right-4 h-0.5 bg-amber rounded-full"></span>
+        </button>
+        <button id="nav-btn-analyze" onclick="navigateTo('analyze')" class="nav-btn relative px-4 py-2 text-sm font-medium text-muted transition-colors hover:text-ink">
+          Analyze Review
+          <span class="nav-indicator absolute bottom-0 left-4 right-4 h-0.5 bg-amber rounded-full opacity-0"></span>
+        </button>
+        <button id="nav-btn-about" onclick="navigateTo('about')" class="nav-btn relative px-4 py-2 text-sm font-medium text-muted transition-colors hover:text-ink">
+          About Project
+          <span class="nav-indicator absolute bottom-0 left-4 right-4 h-0.5 bg-amber rounded-full opacity-0"></span>
+        </button>
+      </nav>
+
+      <!-- Right Action CTA -->
+      <div class="flex items-center gap-3">
+        <button onclick="navigateTo('analyze')" class="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-petrol text-white text-sm font-medium shadow-sm hover:bg-petrol-dark transition-all transform active:scale-95">
+          <svg class="w-4 h-4 text-petrol-light" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          </svg>
+          Analyze Review
+        </button>
+        
+        <!-- Mobile menu toggle -->
+        <button onclick="toggleMobileNav()" class="md:hidden p-2 rounded-lg text-ink hover:bg-bordercol/50">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-7 6h7"></path>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- Mobile Nav Dropdown -->
+    <div id="mobile-nav" class="hidden md:hidden border-t border-bordercol bg-ivory px-4 py-3 space-y-2">
+      <button onclick="navigateTo('home'); toggleMobileNav();" class="block w-full text-left px-3 py-2 text-sm font-medium text-ink hover:bg-white rounded-md">Home</button>
+      <button onclick="navigateTo('analyze'); toggleMobileNav();" class="block w-full text-left px-3 py-2 text-sm font-medium text-muted hover:text-ink hover:bg-white rounded-md">Analyze Review</button>
+      <button onclick="navigateTo('about'); toggleMobileNav();" class="block w-full text-left px-3 py-2 text-sm font-medium text-muted hover:text-ink hover:bg-white rounded-md">About Project</button>
+    </div>
+  </header>
+
+  <!-- ========================================== -->
+  <!-- MAIN CONTAINER WITH DYNAMIC PAGES          -->
+  <!-- ========================================== -->
+  <main class="flex-grow">
+
+    <!-- ---------------------------------------- -->
+    <!-- PAGE 1: HOME                             -->
+    <!-- ---------------------------------------- -->
+    <section id="page-home" class="page-view active">
+      
+      <!-- HERO SECTION (Split Layout) -->
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-12 pb-16 lg:pt-20 lg:pb-24">
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-8 items-center">
+          
+          <!-- Left Column: Copy & CTAs -->
+          <div class="lg:col-span-7 space-y-6">
+            <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-petrol-light/60 border border-petrol/20 text-petrol text-xs font-mono tracking-wider font-semibold uppercase">
+              <span class="w-2 h-2 rounded-full bg-petrol"></span>
+              Review Authenticity Detection
+            </div>
+
+            <h1 class="font-serif text-5xl sm:text-6xl lg:text-7xl font-semibold tracking-tight text-ink leading-[1.08]">
+              Know which reviews to trust.
+            </h1>
+
+            <p class="text-lg sm:text-xl text-muted leading-relaxed max-w-2xl font-normal">
+              ReviewTrellis applies supervised Machine Learning to scan e-commerce product feedback, distinguishing genuine human sentiments from computer-generated and synthetic reviews.
+            </p>
+
+            <div class="pt-2 flex flex-wrap items-center gap-4">
+              <button onclick="navigateTo('analyze')" class="px-6 py-3.5 rounded-lg bg-petrol text-white font-medium text-base shadow-sm hover:bg-petrol-dark transition-all flex items-center gap-2 group">
+                <span>Analyze a Review</span>
+                <svg class="w-4 h-4 transition-transform group-hover:translate-x-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3"/>
+                </svg>
+              </button>
+              
+              <button onclick="navigateTo('about')" class="px-6 py-3.5 rounded-lg bg-surface border border-bordercol text-ink font-medium text-base hover:bg-ivory hover:border-muted/40 transition-all flex items-center gap-2">
+                <span>About Project</span>
+              </button>
+            </div>
+
+            <!-- Trust Line -->
+            <div class="pt-6 border-t border-bordercol flex items-center gap-6 text-xs text-muted font-mono">
+              <div class="flex items-center gap-2">
+                <svg class="w-4 h-4 text-petrol" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+                </svg>
+                <span>TF-IDF (30,000 N-Grams) + Linear SVM</span>
+              </div>
+              <span class="text-bordercol font-bold">·</span>
+              <div class="flex items-center gap-2">
+                <svg class="w-4 h-4 text-amber" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3"/>
+                </svg>
+                <span>3 Algorithms Evaluated on Stratified Split</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Right Column: Editorial 3D Robot Inspector Illustration -->
+          <div class="lg:col-span-5 relative flex justify-center">
+            
+            <!-- Ambient Card Backing & Accents -->
+            <div class="relative w-full max-w-md">
+              <div class="absolute -top-4 -right-4 w-64 h-64 bg-petrol-light/40 rounded-full blur-2xl -z-10 pointer-events-none"></div>
+              <div class="absolute -bottom-6 -left-6 w-56 h-56 bg-amber-light rounded-full blur-xl -z-10 pointer-events-none"></div>
+
+              <!-- Main Illustration Container -->
+              <div class="bg-surface p-4 sm:p-5 rounded-2xl border border-bordercol shadow-[0_12px_30px_rgba(31,36,33,0.05)] relative group">
+                <div class="overflow-hidden rounded-xl bg-ivory aspect-square relative flex items-center justify-center">
+                  <img 
+                    src="https://lh3.googleusercontent.com/aida-public/AB6AXuBMBh7wobPcf2ADz_8fGUvU3dvRxb4I09jeXBEjRR0-1AZh4sLjQRsuao5-h1Ia2X4oO12q7gYdxGZecYRZOoLK8ny4Xd7mvB3vEIg_ws5HRVxFND9wNcK1HGdFphGtTlDFQ8hzw-06V0htCEUhdbOO_3WzB94Afcn7Ey-525a5dly3taT5aQBQQAcNRO2TJdMv5WDh3-NzCo8dYfC9lzzeNYhZt7oZ00I5qhjU7io" 
+                    alt="Warm tactile 3D robot inspector holding magnifying glass over product review card" 
+                    class="w-full h-full object-cover transform transition-transform duration-700 group-hover:scale-105"
+                  />
+                  
+                  <!-- Floating Badge 1 (Top Left) -->
+                  <div class="absolute top-4 left-4 bg-surface/95 backdrop-blur-sm border border-bordercol px-3 py-1.5 rounded-lg shadow-sm flex items-center gap-2">
+                    <span class="w-2 h-2 rounded-full bg-petrol animate-pulse"></span>
+                    <span class="text-xs font-mono font-medium text-ink">Linear SVM active</span>
+                  </div>
+
+                  <!-- Floating Badge 2 (Bottom Right) -->
+                  <div class="absolute bottom-4 right-4 bg-surface/95 backdrop-blur-sm border border-bordercol px-3 py-2 rounded-lg shadow-sm">
+                    <div class="flex items-center gap-1.5">
+                      <svg class="w-3.5 h-3.5 text-amber" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/>
+                      </svg>
+                      <span class="text-[11px] font-sans font-semibold text-ink">Original vs. Synthetic</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="mt-4 flex items-center justify-between px-1">
+                  <div class="text-xs font-mono text-muted">Feature Space: 30k unigrams + bigrams</div>
+                  <div class="text-xs font-mono text-petrol font-medium">Stratified 80/20</div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+
+      <!-- ========================================== -->
+      <!-- INFINITE HORIZONTAL MARQUEE STRIP          -->
+      <!-- ========================================== -->
+      <section class="border-y border-bordercol bg-surface py-12 overflow-hidden relative">
+        <div class="max-w-7xl mx-auto px-4 mb-6 text-center">
+          <p class="font-serif text-2xl font-medium text-ink">Built for reviews from every marketplace.</p>
+          <p class="text-xs font-mono uppercase tracking-wider text-muted mt-1">Universal lexical evaluation for consumer products & commerce platforms</p>
+        </div>
+
+        <!-- Fading masks on edges -->
+        <div class="pointer-events-none absolute inset-y-0 left-0 w-28 bg-gradient-to-r from-surface to-transparent z-10"></div>
+        <div class="pointer-events-none absolute inset-y-0 right-0 w-28 bg-gradient-to-l from-surface to-transparent z-10"></div>
+
+        <!-- Row 1: Leftward scroll -->
+        <div class="flex overflow-hidden py-2">
+          <div class="flex items-center gap-6 shrink-0 animate-marquee-left whitespace-nowrap">
+            <!-- Badge 1 -->
+            <div class="inline-flex items-center gap-2.5 px-4 py-2.5 rounded-xl border border-bordercol bg-ivory/60 hover:bg-ivory hover:border-petrol/40 transition-colors">
+              <svg class="w-5 h-5 text-petrol" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"/></svg>
+              <span class="font-serif font-semibold text-sm text-ink">ApexStore</span>
+              <span class="text-[10px] font-mono text-muted uppercase">Retail</span>
+            </div>
+            <!-- Badge 2 -->
+            <div class="inline-flex items-center gap-2.5 px-4 py-2.5 rounded-xl border border-bordercol bg-ivory/60 hover:bg-ivory hover:border-petrol/40 transition-colors">
+              <svg class="w-5 h-5 text-amber" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
+              <span class="font-serif font-semibold text-sm text-ink">OmniMarket</span>
+              <span class="text-[10px] font-mono text-muted uppercase">Global</span>
+            </div>
+            <!-- Badge 3 -->
+            <div class="inline-flex items-center gap-2.5 px-4 py-2.5 rounded-xl border border-bordercol bg-ivory/60 hover:bg-ivory hover:border-petrol/40 transition-colors">
+              <svg class="w-5 h-5 text-petrol" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"/></svg>
+              <span class="font-serif font-semibold text-sm text-ink">VanguardDeals</span>
+              <span class="text-[10px] font-mono text-muted uppercase">Tech</span>
+            </div>
+            <!-- Badge 4 -->
+            <div class="inline-flex items-center gap-2.5 px-4 py-2.5 rounded-xl border border-bordercol bg-ivory/60 hover:bg-ivory hover:border-petrol/40 transition-colors">
+              <svg class="w-5 h-5 text-amber" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
+              <span class="font-serif font-semibold text-sm text-ink">LogosGoods</span>
+              <span class="text-[10px] font-mono text-muted uppercase">Direct</span>
+            </div>
+            <!-- Badge 5 -->
+            <div class="inline-flex items-center gap-2.5 px-4 py-2.5 rounded-xl border border-bordercol bg-ivory/60 hover:bg-ivory hover:border-petrol/40 transition-colors">
+              <svg class="w-5 h-5 text-petrol" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg>
+              <span class="font-serif font-semibold text-sm text-ink">BoutiqueTrove</span>
+              <span class="text-[10px] font-mono text-muted uppercase">Curated</span>
+            </div>
+            <!-- Badge 6 -->
+            <div class="inline-flex items-center gap-2.5 px-4 py-2.5 rounded-xl border border-bordercol bg-ivory/60 hover:bg-ivory hover:border-petrol/40 transition-colors">
+              <svg class="w-5 h-5 text-ink" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+              <span class="font-serif font-semibold text-sm text-ink">PriceHarbor</span>
+              <span class="text-[10px] font-mono text-muted uppercase">Wholesale</span>
+            </div>
+
+            <!-- Duplicate set for seamless continuous loop -->
+            <div class="inline-flex items-center gap-2.5 px-4 py-2.5 rounded-xl border border-bordercol bg-ivory/60 hover:bg-ivory hover:border-petrol/40 transition-colors">
+              <svg class="w-5 h-5 text-petrol" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"/></svg>
+              <span class="font-serif font-semibold text-sm text-ink">ApexStore</span>
+              <span class="text-[10px] font-mono text-muted uppercase">Retail</span>
+            </div>
+            <div class="inline-flex items-center gap-2.5 px-4 py-2.5 rounded-xl border border-bordercol bg-ivory/60 hover:bg-ivory hover:border-petrol/40 transition-colors">
+              <svg class="w-5 h-5 text-amber" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
+              <span class="font-serif font-semibold text-sm text-ink">OmniMarket</span>
+              <span class="text-[10px] font-mono text-muted uppercase">Global</span>
+            </div>
+            <div class="inline-flex items-center gap-2.5 px-4 py-2.5 rounded-xl border border-bordercol bg-ivory/60 hover:bg-ivory hover:border-petrol/40 transition-colors">
+              <svg class="w-5 h-5 text-petrol" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"/></svg>
+              <span class="font-serif font-semibold text-sm text-ink">VanguardDeals</span>
+              <span class="text-[10px] font-mono text-muted uppercase">Tech</span>
+            </div>
+            <div class="inline-flex items-center gap-2.5 px-4 py-2.5 rounded-xl border border-bordercol bg-ivory/60 hover:bg-ivory hover:border-petrol/40 transition-colors">
+              <svg class="w-5 h-5 text-amber" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
+              <span class="font-serif font-semibold text-sm text-ink">LogosGoods</span>
+              <span class="text-[10px] font-mono text-muted uppercase">Direct</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Row 2: Rightward scroll -->
+        <div class="flex overflow-hidden py-2 mt-2">
+          <div class="flex items-center gap-6 shrink-0 animate-marquee-right whitespace-nowrap">
+            <!-- Badge A -->
+            <div class="inline-flex items-center gap-2.5 px-4 py-2.5 rounded-xl border border-bordercol bg-ivory/60 hover:bg-ivory hover:border-petrol/40 transition-colors">
+              <svg class="w-5 h-5 text-petrol" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
+              <span class="font-serif font-semibold text-sm text-ink">HomeHaven</span>
+              <span class="text-[10px] font-mono text-muted uppercase">Home & Living</span>
+            </div>
+            <!-- Badge B -->
+            <div class="inline-flex items-center gap-2.5 px-4 py-2.5 rounded-xl border border-bordercol bg-ivory/60 hover:bg-ivory hover:border-petrol/40 transition-colors">
+              <svg class="w-5 h-5 text-amber" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
+              <span class="font-serif font-semibold text-sm text-ink">GadgetNest</span>
+              <span class="text-[10px] font-mono text-muted uppercase">Consumer Tech</span>
+            </div>
+            <!-- Badge C -->
+            <div class="inline-flex items-center gap-2.5 px-4 py-2.5 rounded-xl border border-bordercol bg-ivory/60 hover:bg-ivory hover:border-petrol/40 transition-colors">
+              <svg class="w-5 h-5 text-petrol" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/></svg>
+              <span class="font-serif font-semibold text-sm text-ink">AuraBeauty</span>
+              <span class="text-[10px] font-mono text-muted uppercase">Cosmetics</span>
+            </div>
+            <!-- Badge D -->
+            <div class="inline-flex items-center gap-2.5 px-4 py-2.5 rounded-xl border border-bordercol bg-ivory/60 hover:bg-ivory hover:border-petrol/40 transition-colors">
+              <svg class="w-5 h-5 text-ink" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+              <span class="font-serif font-semibold text-sm text-ink">UrbanFinds</span>
+              <span class="text-[10px] font-mono text-muted uppercase">Lifestyle</span>
+            </div>
+            <!-- Badge E -->
+            <div class="inline-flex items-center gap-2.5 px-4 py-2.5 rounded-xl border border-bordercol bg-ivory/60 hover:bg-ivory hover:border-petrol/40 transition-colors">
+              <svg class="w-5 h-5 text-petrol" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+              <span class="font-serif font-semibold text-sm text-ink">VoltSupply</span>
+              <span class="text-[10px] font-mono text-muted uppercase">Hardware</span>
+            </div>
+
+            <!-- Loop repeat -->
+            <div class="inline-flex items-center gap-2.5 px-4 py-2.5 rounded-xl border border-bordercol bg-ivory/60 hover:bg-ivory hover:border-petrol/40 transition-colors">
+              <svg class="w-5 h-5 text-petrol" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
+              <span class="font-serif font-semibold text-sm text-ink">HomeHaven</span>
+              <span class="text-[10px] font-mono text-muted uppercase">Home & Living</span>
+            </div>
+            <div class="inline-flex items-center gap-2.5 px-4 py-2.5 rounded-xl border border-bordercol bg-ivory/60 hover:bg-ivory hover:border-petrol/40 transition-colors">
+              <svg class="w-5 h-5 text-amber" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
+              <span class="font-serif font-semibold text-sm text-ink">GadgetNest</span>
+              <span class="text-[10px] font-mono text-muted uppercase">Consumer Tech</span>
+            </div>
+            <div class="inline-flex items-center gap-2.5 px-4 py-2.5 rounded-xl border border-bordercol bg-ivory/60 hover:bg-ivory hover:border-petrol/40 transition-colors">
+              <svg class="w-5 h-5 text-petrol" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/></svg>
+              <span class="font-serif font-semibold text-sm text-ink">AuraBeauty</span>
+              <span class="text-[10px] font-mono text-muted uppercase">Cosmetics</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========================================== -->
+      <!-- SECTION 1: HOW IT WORKS (4 Horizontal Steps) -->
+      <!-- ========================================== -->
+      <section class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20 lg:py-28">
+        <div class="text-center max-w-3xl mx-auto mb-16">
+          <span class="text-xs uppercase font-mono tracking-wider text-petrol font-semibold">End-To-End Architecture</span>
+          <h2 class="font-serif text-3xl sm:text-4xl lg:text-5xl font-semibold text-ink mt-2">How it works</h2>
+          <p class="text-muted mt-3 text-base">From raw review text to an objective lexical classification in four deterministic steps.</p>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 relative">
+          
+          <!-- Step 1 -->
+          <div class="bg-surface p-7 rounded-xl border border-bordercol shadow-sm relative group hover:border-petrol/40 transition-all">
+            <div class="flex items-center justify-between mb-6">
+              <div class="w-12 h-12 rounded-lg bg-ivory border border-bordercol flex items-center justify-center text-petrol">
+                <!-- Paste Line Icon -->
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>
+                </svg>
+              </div>
+              <span class="font-mono text-xs text-muted font-semibold">01</span>
+            </div>
+            <h3 class="font-serif text-xl font-semibold text-ink mb-2">Paste Review</h3>
+            <p class="text-sm text-muted leading-relaxed">
+              Accepts customer feedback, buyer testimonials, or third-party product comments as input strings.
+            </p>
+          </div>
+
+          <!-- Step 2 -->
+          <div class="bg-surface p-7 rounded-xl border border-bordercol shadow-sm relative group hover:border-petrol/40 transition-all">
+            <div class="flex items-center justify-between mb-6">
+              <div class="w-12 h-12 rounded-lg bg-ivory border border-bordercol flex items-center justify-center text-petrol">
+                <!-- Text Cleaning Line Icon -->
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                </svg>
+              </div>
+              <span class="font-mono text-xs text-muted font-semibold">02</span>
+            </div>
+            <h3 class="font-serif text-xl font-semibold text-ink mb-2">Text Cleaning</h3>
+            <p class="text-sm text-muted leading-relaxed">
+              Normalizes characters, scrubs HTML tags, removes raw URLs, handles duplicate entries, and strips punctuation.
+            </p>
+          </div>
+
+          <!-- Step 3 -->
+          <div class="bg-surface p-7 rounded-xl border border-bordercol shadow-sm relative group hover:border-petrol/40 transition-all">
+            <div class="flex items-center justify-between mb-6">
+              <div class="w-12 h-12 rounded-lg bg-ivory border border-bordercol flex items-center justify-center text-amber">
+                <!-- TF-IDF Line Icon -->
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"/>
+                </svg>
+              </div>
+              <span class="font-mono text-xs text-muted font-semibold">03</span>
+            </div>
+            <h3 class="font-serif text-xl font-semibold text-ink mb-2">TF-IDF Vectorization</h3>
+            <p class="text-sm text-muted leading-relaxed">
+              Extracts up to 30,000 unigram and bigram token features to map statistical word importance across the corpus.
+            </p>
+          </div>
+
+          <!-- Step 4 -->
+          <div class="bg-surface p-7 rounded-xl border border-bordercol shadow-sm relative group hover:border-petrol/40 transition-all">
+            <div class="flex items-center justify-between mb-6">
+              <div class="w-12 h-12 rounded-lg bg-ivory border border-bordercol flex items-center justify-center text-petrol">
+                <!-- Classification Line Icon -->
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"/>
+                </svg>
+              </div>
+              <span class="font-mono text-xs text-muted font-semibold">04</span>
+            </div>
+            <h3 class="font-serif text-xl font-semibold text-ink mb-2">Discrete Prediction</h3>
+            <p class="text-sm text-muted leading-relaxed">
+              Linear SVM evaluates the feature vector and outputs exactly one label: Likely Genuine or Potentially Fake.
+            </p>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- ========================================== -->
+      <!-- SECTION 2: DARK FEATURE BAND (#16222A)     -->
+      <!-- ========================================== -->
+      <section class="bg-darkslate text-ivory py-20 lg:py-24 border-y border-bordercol/20">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          
+          <div class="max-w-3xl mb-14">
+            <span class="text-xs uppercase font-mono tracking-wider text-amber font-semibold">Core Product Pillars</span>
+            <h2 class="font-serif text-3xl sm:text-4xl font-semibold text-white mt-2">Engineered for grounded, transparent evaluation</h2>
+            <p class="text-ivory/70 mt-3 text-base">No hallucinated confidence bars, no synthetic confidence percentages, and no black-box opacity.</p>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+            
+            <!-- Card 1 -->
+            <div class="bg-white/5 border border-white/10 rounded-xl p-8 hover:bg-white/[0.08] transition-colors">
+              <div class="w-10 h-10 rounded-lg bg-petrol/40 border border-petrol/60 flex items-center justify-center text-petrol-light mb-6">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                </svg>
+              </div>
+              <h3 class="font-serif text-xl font-semibold text-white mb-2">Instant Review Check</h3>
+              <p class="text-ivory/70 text-sm leading-relaxed">
+                Fast, deterministic inference designed for live e-commerce workflows. Paste any body of text and obtain immediate algorithmic classification.
+              </p>
+            </div>
+
+            <!-- Card 2 -->
+            <div class="bg-white/5 border border-white/10 rounded-xl p-8 hover:bg-white/[0.08] transition-colors">
+              <div class="w-10 h-10 rounded-lg bg-amber/30 border border-amber/50 flex items-center justify-center text-amber mb-6">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+                </svg>
+              </div>
+              <h3 class="font-serif text-xl font-semibold text-white mb-2">Three Algorithms Compared</h3>
+              <p class="text-ivory/70 text-sm leading-relaxed">
+                Rigorous benchmarking against Logistic Regression and Multinomial Naive Bayes. Linear SVM proved superior on test splits.
+              </p>
+            </div>
+
+            <!-- Card 3 -->
+            <div class="bg-white/5 border border-white/10 rounded-xl p-8 hover:bg-white/[0.08] transition-colors">
+              <div class="w-10 h-10 rounded-lg bg-petrol/40 border border-petrol/60 flex items-center justify-center text-petrol-light mb-6">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+                </svg>
+              </div>
+              <h3 class="font-serif text-xl font-semibold text-white mb-2">Clear, Honest Results</h3>
+              <p class="text-ivory/70 text-sm leading-relaxed">
+                Explicit framing as an ML predictive indicator, avoiding inflated percentages or claims of omniscient truth.
+              </p>
+            </div>
+
+          </div>
+
+        </div>
+      </section>
+
+      <!-- ========================================== -->
+      <!-- SECTION 3: FINAL CTA BANNER                -->
+      <!-- ========================================== -->
+      <section class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20 lg:py-24">
+        <div class="bg-surface rounded-2xl border border-bordercol p-8 sm:p-12 lg:p-16 flex flex-col md:flex-row items-center justify-between gap-8 shadow-sm">
+          <div class="max-w-xl">
+            <span class="text-xs uppercase font-mono tracking-wider text-muted font-medium">Ready to test?</span>
+            <h2 class="font-serif text-3xl sm:text-4xl font-semibold text-ink mt-1">Check a review in seconds.</h2>
+            <p class="text-muted mt-2 text-base">Paste your product text into our interactive analyzer to see the Linear SVM classifier in action.</p>
+          </div>
+          <div class="shrink-0 flex items-center gap-4">
+            <button onclick="navigateTo('analyze')" class="px-7 py-3.5 rounded-lg bg-petrol text-white font-medium text-base shadow-sm hover:bg-petrol-dark transition-all transform active:scale-95">
+              Analyze Review
+            </button>
+            <button onclick="navigateTo('about')" class="px-6 py-3.5 rounded-lg bg-ivory border border-bordercol text-ink font-medium text-base hover:bg-white transition-colors">
+              Explore Research
+            </button>
+          </div>
+        </div>
+      </section>
+
+    </section>
+
+
+    <!-- ---------------------------------------- -->
+    <!-- PAGE 2: ANALYZE REVIEW (Fully Interactive) -->
+    <!-- ---------------------------------------- -->
+    <section id="page-analyze" class="page-view">
+      <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12 lg:py-16">
+        
+        <!-- Header -->
+        <div class="text-center max-w-2xl mx-auto mb-10">
+          <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-petrol-light/50 border border-petrol/20 text-petrol text-xs font-mono font-medium mb-3">
+            Interactive ML Prototype
+          </div>
+          <h1 class="font-serif text-4xl sm:text-5xl font-semibold text-ink tracking-tight">Analyze a Review</h1>
+          <p class="text-muted text-base sm:text-lg mt-2">
+            Paste any product review to check whether it looks genuine.
+          </p>
+        </div>
+
+        <!-- STATE A: INPUT CARD -->
+        <div id="analyze-state-input" class="bg-surface rounded-2xl border border-bordercol p-6 sm:p-8 shadow-sm transition-all">
+          <label for="review-textarea" class="block font-serif text-lg font-medium text-ink mb-2">Review Content</label>
+          
+          <div class="relative">
+            <textarea 
+              id="review-textarea" 
+              rows="6" 
+              maxlength="10000"
+              placeholder="Paste a product review here..."
+              oninput="handleTextInput(this)"
+              class="w-full rounded-xl border border-bordercol bg-ivory/30 p-4 text-ink font-sans text-base placeholder-muted/60 focus:outline-none focus:border-petrol focus:ring-1 focus:ring-petrol transition-colors resize-y"
+            ></textarea>
+          </div>
+          <div id="analyze-error" role="alert" class="hidden mt-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800"></div>
+
+          <!-- Bottom bar: Char Counter + Action Buttons -->
+          <div class="mt-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-2">
+            <div class="flex items-center gap-4 text-xs font-mono text-muted">
+              <span id="char-counter">0 characters</span>
+              <span class="text-bordercol">|</span>
+              <span id="word-counter">0 words</span>
+              <span class="text-bordercol">|</span>
+              <span>Maximum 10,000 characters</span>
+            </div>
+
+            <div class="flex items-center gap-3">
+              <button 
+                id="btn-clear" 
+                onclick="clearTextInput()" 
+                class="px-4 py-2.5 rounded-lg border border-bordercol bg-surface text-sm font-medium text-muted hover:text-ink hover:bg-ivory transition-colors"
+              >
+                Clear
+              </button>
+
+              <button 
+                id="btn-analyze" 
+                onclick="triggerAnalyze()" 
+                class="px-6 py-2.5 rounded-lg bg-petrol text-white text-sm font-medium transition-all hover:bg-petrol-dark flex items-center gap-2"
+              >
+                <span>Analyze</span>
+                <svg class="w-4 h-4 text-petrol-light" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- STATE B: LOADING STATE -->
+        <div id="analyze-state-loading" class="hidden bg-surface rounded-2xl border border-bordercol p-12 text-center shadow-sm">
+          <div class="max-w-md mx-auto space-y-6">
+            <div class="w-12 h-12 rounded-full bg-petrol-light border border-petrol/20 flex items-center justify-center mx-auto text-petrol">
+              <svg class="w-6 h-6 animate-spin" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+            </div>
+
+            <div>
+              <h3 class="font-serif text-xl font-medium text-ink">Analyzing review…</h3>
+              <p class="text-xs font-mono text-muted mt-1">Tokenizing TF-IDF (30,000 features) → Evaluating Linear SVM boundary</p>
+            </div>
+
+            <!-- Progress bar -->
+            <div class="w-full bg-ivory rounded-full h-1.5 overflow-hidden border border-bordercol">
+              <div class="bg-petrol h-full loading-progress rounded-full"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- STATE C: RESULT STATE -->
+        <div id="analyze-state-result" class="hidden space-y-6">
+          
+          <!-- Result Card (Dynamic styling injected via JS) -->
+          <div id="result-card" class="bg-surface rounded-2xl border p-6 sm:p-8 shadow-sm transition-all">
+            
+            <!-- Result Header with Status Line & Icon -->
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between pb-6 border-b border-bordercol gap-4">
+              <div class="flex items-center gap-3.5">
+                <div id="result-icon-container" class="w-12 h-12 rounded-xl flex items-center justify-center">
+                  <!-- Injected Icon -->
+                </div>
+                <div>
+                  <span class="text-[11px] font-mono uppercase tracking-wider text-muted font-semibold block">Model Assessment</span>
+                  <h2 id="result-label" class="font-serif text-2xl sm:text-3xl font-bold tracking-tight">
+                    <!-- Injected Label -->
+                  </h2>
+                </div>
+              </div>
+
+            </div>
+
+            <!-- Review Excerpt in Quoted Block -->
+            <div class="py-6">
+              <span class="text-xs font-mono uppercase tracking-wider text-muted block mb-2 font-medium">Analyzed Review Text</span>
+              <div class="bg-ivory/50 rounded-xl p-5 border border-bordercol text-ink text-base italic leading-relaxed relative">
+                <span class="font-serif text-3xl text-muted/30 absolute top-2 left-2">“</span>
+                <p id="result-quoted-text" class="relative z-10 pl-3">
+                  <!-- Injected text -->
+                </p>
+                <span class="font-serif text-3xl text-muted/30 absolute bottom-0 right-3">”</span>
+              </div>
+            </div>
+
+            <!-- Meta statistics: Length, Model, Plain Language Note -->
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2 pb-6 border-b border-bordercol">
+              <div class="p-3 bg-ivory/40 rounded-lg border border-bordercol/60">
+                <span class="text-[11px] font-mono text-muted block">Character Count</span>
+                <span id="result-meta-chars" class="font-mono text-base font-semibold text-ink">-- chars</span>
+              </div>
+              <div class="p-3 bg-ivory/40 rounded-lg border border-bordercol/60">
+                <span class="text-[11px] font-mono text-muted block">Word Count</span>
+                <span id="result-meta-words" class="font-mono text-base font-semibold text-ink">-- words</span>
+              </div>
+              <div class="p-3 bg-ivory/40 rounded-lg border border-bordercol/60">
+                <span class="text-[11px] font-mono text-muted block">Model Applied</span>
+                <span id="result-meta-model" class="font-mono text-base font-semibold text-petrol">Linear SVM</span>
+              </div>
+            </div>
+
+            <!-- Important ML Disclaimer Note -->
+            <div class="pt-6 flex items-start gap-3 text-xs text-muted leading-relaxed">
+              <svg class="w-5 h-5 text-muted shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="16" x2="12" y2="12"></line>
+                <line x1="12" y1="8" x2="12.01" y2="8"></line>
+              </svg>
+              <div>
+                <strong class="text-ink font-semibold">Important Methodology Note:</strong> This is a Machine Learning prediction based on statistical n-gram patterns, not a definitive judgment. No review is guaranteed to be authentic or fabricated based solely on algorithmic feature extraction.
+              </div>
+            </div>
+
+          </div>
+
+          <!-- Bottom Reset CTA -->
+          <div class="flex justify-center pt-2">
+            <button onclick="resetToInputState()" class="px-6 py-3 rounded-lg bg-surface border border-bordercol text-ink font-medium text-sm hover:bg-ivory hover:border-muted/50 transition-all flex items-center gap-2 shadow-xs">
+              <svg class="w-4 h-4 text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+              </svg>
+              <span>Analyze Another Review</span>
+            </button>
+          </div>
+
+        </div>
+
+      </div>
+    </section>
+
+
+    <!-- ---------------------------------------- -->
+    <!-- PAGE 3: ABOUT PROJECT                     -->
+    <!-- ---------------------------------------- -->
+    <section id="page-about" class="page-view">
+      <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-12 lg:py-20 space-y-16 lg:space-y-20">
+        
+        <!-- Header -->
+        <div class="max-w-3xl">
+          <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-petrol-light/50 border border-petrol/20 text-petrol text-xs font-mono font-medium mb-3">
+            System Documentation & Methodology
+          </div>
+          <h1 class="font-serif text-4xl sm:text-5xl font-semibold text-ink tracking-tight">About ReviewTrellis</h1>
+          <p class="text-muted text-lg mt-3 leading-relaxed">
+            A comprehensive overview of our NLP pipeline, benchmarked classification models, dataset origins, and performance metrics.
+          </p>
+        </div>
+
+        <!-- 1. INTRO & PROBLEM -->
+        <div class="grid grid-cols-1 md:grid-cols-12 gap-8 items-start pb-12 border-b border-bordercol">
+          <div class="md:col-span-4">
+            <span class="text-xs font-mono uppercase tracking-wider text-petrol font-semibold">01 / The Challenge</span>
+            <h2 class="font-serif text-2xl font-semibold text-ink mt-1">The Problem of Fake Reviews</h2>
+          </div>
+          <div class="md:col-span-8 space-y-4 text-muted text-base leading-relaxed">
+            <p>
+              In contemporary online commerce, customer purchasing decisions rely heavily on peer testimonials. However, the proliferation of incentivized fake reviews and computer-generated synthetic feedback undermines marketplace transparency.
+            </p>
+            <p>
+              <strong class="text-ink font-medium">ReviewTrellis</strong> was developed as an exploratory Machine Learning research prototype to analyze linguistic distributions within reviews, utilizing robust lexical n-gram statistics to flag reviews that exhibit markers consistent with synthetic generation.
+            </p>
+          </div>
+        </div>
+
+        <!-- 2. PIPELINE DIAGRAM -->
+        <div class="space-y-6 pb-12 border-b border-bordercol">
+          <div>
+            <span class="text-xs font-mono uppercase tracking-wider text-petrol font-semibold">02 / Architecture</span>
+            <h2 class="font-serif text-2xl sm:text-3xl font-semibold text-ink mt-1">End-to-End Pipeline Diagram</h2>
+            <p class="text-muted text-sm mt-1">Data processing from initial corpus ingestion to active inference label.</p>
+          </div>
+
+          <!-- Visual Node Flow -->
+          <div class="bg-surface rounded-2xl border border-bordercol p-6 sm:p-8 shadow-sm">
+            <div class="grid grid-cols-1 md:grid-cols-7 gap-3 text-center">
+              
+              <!-- Node 1 -->
+              <div class="bg-ivory p-3.5 rounded-xl border border-bordercol flex flex-col justify-between">
+                <span class="text-[10px] font-mono text-muted uppercase">Input</span>
+                <span class="font-serif font-semibold text-sm text-ink my-1">Labeled Dataset</span>
+                <span class="text-[10px] font-mono text-muted">Original vs CG</span>
+              </div>
+
+              <!-- Arrow -->
+              <div class="hidden md:flex items-center justify-center text-muted">
+                <svg class="w-5 h-5 text-bordercol" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
+              </div>
+
+              <!-- Node 2 -->
+              <div class="bg-ivory p-3.5 rounded-xl border border-bordercol flex flex-col justify-between">
+                <span class="text-[10px] font-mono text-muted uppercase">Clean</span>
+                <span class="font-serif font-semibold text-sm text-ink my-1">Text Cleaning</span>
+                <span class="text-[10px] font-mono text-muted">URLs, HTML, dupes</span>
+              </div>
+
+              <!-- Arrow -->
+              <div class="hidden md:flex items-center justify-center text-muted">
+                <svg class="w-5 h-5 text-bordercol" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
+              </div>
+
+              <!-- Node 3 -->
+              <div class="bg-ivory p-3.5 rounded-xl border border-bordercol flex flex-col justify-between">
+                <span class="text-[10px] font-mono text-muted uppercase">Split</span>
+                <span class="font-serif font-semibold text-sm text-ink my-1">Stratified 80/20</span>
+                <span class="text-[10px] font-mono text-muted">Train & Test sets</span>
+              </div>
+
+              <!-- Arrow -->
+              <div class="hidden md:flex items-center justify-center text-muted">
+                <svg class="w-5 h-5 text-bordercol" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
+              </div>
+
+              <!-- Node 4 -->
+              <div class="bg-ivory p-3.5 rounded-xl border border-bordercol flex flex-col justify-between">
+                <span class="text-[10px] font-mono text-muted uppercase">Features</span>
+                <span class="font-serif font-semibold text-sm text-ink my-1">TF-IDF</span>
+                <span class="text-[10px] font-mono text-muted">30k n-grams (1,2)</span>
+              </div>
+
+            </div>
+
+            <!-- Second tier: Training -> Evaluation -> Prediction -->
+            <div class="mt-4 pt-4 border-t border-bordercol grid grid-cols-1 md:grid-cols-5 gap-3 text-center">
+              
+              <div class="bg-ivory p-3.5 rounded-xl border border-bordercol flex flex-col justify-between">
+                <span class="text-[10px] font-mono text-muted uppercase">Modeling</span>
+                <span class="font-serif font-semibold text-sm text-ink my-1">3 Classifiers Trained</span>
+                <span class="text-[10px] font-mono text-muted">LR, MNB, Linear SVM</span>
+              </div>
+
+              <div class="hidden md:flex items-center justify-center text-muted">
+                <svg class="w-5 h-5 text-bordercol" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
+              </div>
+
+              <div class="bg-ivory p-3.5 rounded-xl border border-bordercol flex flex-col justify-between">
+                <span class="text-[10px] font-mono text-muted uppercase">Evaluation</span>
+                <span class="font-serif font-semibold text-sm text-ink my-1">Test Benchmarking</span>
+                <span class="text-[10px] font-mono text-muted">Acc, Prec, Rec, F1</span>
+              </div>
+
+              <div class="hidden md:flex items-center justify-center text-muted">
+                <svg class="w-5 h-5 text-bordercol" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
+              </div>
+
+              <div class="bg-petrol-light/40 p-3.5 rounded-xl border border-petrol/30 flex flex-col justify-between">
+                <span class="text-[10px] font-mono text-petrol uppercase font-semibold">Active Inference</span>
+                <span class="font-serif font-semibold text-sm text-petrol my-1">Linear SVM Prediction</span>
+                <span class="text-[10px] font-mono text-petrol">Genuine or Fake</span>
+              </div>
+
+            </div>
+          </div>
+        </div>
+
+        <!-- 3. THREE ALGORITHMS (Equal Visual Weight) -->
+        <div class="space-y-6 pb-12 border-b border-bordercol">
+          <div>
+            <span class="text-xs font-mono uppercase tracking-wider text-petrol font-semibold">03 / Algorithms</span>
+            <h2 class="font-serif text-2xl sm:text-3xl font-semibold text-ink mt-1">Evaluated Classifiers</h2>
+            <p class="text-muted text-sm mt-1">Three supervised algorithms tested under identical 80/20 train/test splits.</p>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            
+            <!-- Model 1: Logistic Regression -->
+            <div class="bg-surface p-6 rounded-xl border border-bordercol shadow-sm flex flex-col justify-between">
+              <div>
+                <div class="flex items-center justify-between mb-4">
+                  <span class="px-2.5 py-1 rounded bg-ivory text-muted text-xs font-mono font-medium border border-bordercol">Linear Model</span>
+                  <span class="text-xs font-mono text-muted">Baseline</span>
+                </div>
+                <h3 class="font-serif text-xl font-semibold text-ink mb-2">Logistic Regression</h3>
+                <p class="text-sm text-muted leading-relaxed">
+                  Estimates the probability of binary outcomes using the logistic sigmoid function over linear weighted feature combinations. Highly interpretable baseline with fast convergence.
+                </p>
+              </div>
+              <div class="mt-6 pt-4 border-t border-bordercol text-xs font-mono text-muted">
+                Regularization: L2 penalty · Solver: lbfgs
+              </div>
+            </div>
+
+            <!-- Model 2: Multinomial Naive Bayes -->
+            <div class="bg-surface p-6 rounded-xl border border-bordercol shadow-sm flex flex-col justify-between">
+              <div>
+                <div class="flex items-center justify-between mb-4">
+                  <span class="px-2.5 py-1 rounded bg-ivory text-muted text-xs font-mono font-medium border border-bordercol">Probabilistic</span>
+                  <span class="text-xs font-mono text-muted">Frequency-based</span>
+                </div>
+                <h3 class="font-serif text-xl font-semibold text-ink mb-2">Multinomial Naive Bayes</h3>
+                <p class="text-sm text-muted leading-relaxed">
+                  Applies Bayes' theorem assuming conditional independence between token frequencies given the review class. Exceptional speed and well suited for sparse word-frequency representations.
+                </p>
+              </div>
+              <div class="mt-6 pt-4 border-t border-bordercol text-xs font-mono text-muted">
+                Smoothing: Laplace alpha=1.0
+              </div>
+            </div>
+
+            <!-- Model 3: Linear SVM (Selected) -->
+            <div class="bg-surface p-6 rounded-xl border-2 border-petrol shadow-sm flex flex-col justify-between relative">
+              <div class="absolute -top-3 right-4 bg-petrol text-white text-[10px] font-mono uppercase tracking-wider px-2.5 py-0.5 rounded-full font-semibold">
+                Selected Final Model
+              </div>
+              <div>
+                <div class="flex items-center justify-between mb-4">
+                  <span class="px-2.5 py-1 rounded bg-petrol-light text-petrol text-xs font-mono font-medium">Max-Margin</span>
+                  <span class="text-xs font-mono text-petrol font-semibold">Best Test Results</span>
+                </div>
+                <h3 class="font-serif text-xl font-semibold text-ink mb-2">Linear Support Vector Machine</h3>
+                <p class="text-sm text-muted leading-relaxed">
+                  Finds the optimal separating hyperplane that maximizes the geometric margin between genuine and fake text vectors in the 30,000-dimensional TF-IDF sparse space.
+                </p>
+              </div>
+              <div class="mt-6 pt-4 border-t border-bordercol text-xs font-mono text-petrol font-medium">
+                Loss: Squared Hinge · C=1.0 · Max iter: 2000
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- 4. MODEL COMPARISON (Grouped Horizontal Bar Chart) -->
+        <div class="space-y-6 pb-12 border-b border-bordercol">
+          <div class="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+            <div>
+              <span class="text-xs font-mono uppercase tracking-wider text-petrol font-semibold">04 / Performance Benchmarking</span>
+              <h2 class="font-serif text-2xl sm:text-3xl font-semibold text-ink mt-1">Comparative Model Metrics</h2>
+              <p class="text-muted text-sm mt-1">Evaluated on the identical 20% holdout test partition.</p>
+            </div>
+            <div class="inline-flex items-center gap-2 px-3 py-1 rounded-md bg-ivory border border-bordercol text-xs font-mono text-muted self-start sm:self-auto">
+              Latest training evaluation results
+            </div>
+          </div>
+
+          <!-- Grouped Bar Chart Visual Presentation -->
+          <div class="bg-surface rounded-2xl border border-bordercol p-6 sm:p-8 shadow-sm space-y-8">
+            
+            <!-- Legend -->
+            <div class="flex flex-wrap items-center gap-6 pb-4 border-b border-bordercol text-xs font-mono">
+              <div class="flex items-center gap-2">
+                <span class="w-3.5 h-3.5 rounded bg-petrol"></span>
+                <span class="font-medium text-ink">Linear SVM (Final Selected)</span>
+              </div>
+              <div class="flex items-center gap-2">
+                <span class="w-3.5 h-3.5 rounded bg-amber"></span>
+                <span class="font-medium text-ink">Logistic Regression</span>
+              </div>
+              <div class="flex items-center gap-2">
+                <span class="w-3.5 h-3.5 rounded bg-[#9A9386]"></span>
+                <span class="font-medium text-ink">Multinomial Naive Bayes</span>
+              </div>
+            </div>
+
+            {% for metric in evaluation_metrics %}
+            <div class="space-y-2" data-evaluation-metric="{{ metric.key }}">
+              <div class="flex justify-between text-xs font-mono">
+                <span class="font-bold text-ink uppercase tracking-wider">{{ metric.label }}</span>
+                <span class="text-muted">Scale 0–100%</span>
+              </div>
+              <div class="space-y-1.5">
+                {% for model in evaluation_models %}
+                {% set value = model.metrics[metric.key] %}
+                {% set percentage = "%.2f"|format(value * 100) %}
+                <div
+                  class="flex items-center gap-3"
+                  data-algorithm="{{ model.algorithm }}"
+                  data-metric="{{ metric.key }}"
+                  data-value="{{ percentage }}"
+                >
+                  <span class="metric-label w-36 shrink-0 text-[11px] font-mono">{{ model.algorithm }}</span>
+                  <div class="flex-grow bg-ivory rounded-full h-4 overflow-hidden border border-bordercol">
+                    <div class="metric-bar h-full rounded-full" data-metric-width="{{ percentage }}"></div>
+                  </div>
+                  <span class="metric-value w-16 shrink-0 text-right text-xs font-mono">{{ percentage }}%</span>
+                </div>
+                {% endfor %}
+              </div>
+            </div>
+            {% endfor %}
+
+            <!-- Conclusion banner -->
+            <div class="p-4 rounded-xl bg-petrol-light/40 border border-petrol/20 flex items-center justify-between">
+              <div class="flex items-center gap-3">
+                <div class="w-8 h-8 rounded-lg bg-petrol text-white flex items-center justify-center font-bold text-xs">SVM</div>
+                <span class="text-xs font-medium text-ink">Linear SVM achieved the highest F1 score in this evaluation.</span>
+              </div>
+              <span class="text-xs font-mono font-semibold text-petrol uppercase shrink-0">Selected Model</span>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- 5. EVALUATION METRICS EXPLAINED -->
+        <div class="space-y-6 pb-12 border-b border-bordercol">
+          <div>
+            <span class="text-xs font-mono uppercase tracking-wider text-petrol font-semibold">05 / Reference</span>
+            <h2 class="font-serif text-2xl sm:text-3xl font-semibold text-ink mt-1">Evaluation Metrics Explained</h2>
+            <p class="text-muted text-sm mt-1">Clear definitions of how classifier health is measured.</p>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            
+            <div class="bg-surface p-6 rounded-xl border border-bordercol">
+              <h3 class="font-serif text-lg font-semibold text-ink mb-1">Accuracy</h3>
+              <p class="text-sm text-muted leading-relaxed">
+                The ratio of correctly classified reviews (both genuine and fake) over the total number of evaluated samples. Useful on balanced distributions.
+              </p>
+            </div>
+
+            <div class="bg-surface p-6 rounded-xl border border-bordercol">
+              <h3 class="font-serif text-lg font-semibold text-ink mb-1">Precision</h3>
+              <p class="text-sm text-muted leading-relaxed">
+                Of all reviews flagged by the model as Potentially Fake, how many were genuinely synthetic. High precision minimizes false alarms against legitimate buyers.
+              </p>
+            </div>
+
+            <div class="bg-surface p-6 rounded-xl border border-bordercol">
+              <h3 class="font-serif text-lg font-semibold text-ink mb-1">Recall (Sensitivity)</h3>
+              <p class="text-sm text-muted leading-relaxed">
+                Of all actual computer-generated reviews in the test split, what proportion did the model successfully catch. High recall ensures fewer fake reviews slip through unnoticed.
+              </p>
+            </div>
+
+            <div class="bg-surface p-6 rounded-xl border border-bordercol">
+              <h3 class="font-serif text-lg font-semibold text-ink mb-1">F1-Score</h3>
+              <p class="text-sm text-muted leading-relaxed">
+                The harmonic mean of Precision and Recall. Balances both trade-offs into a unified benchmark score for model selection.
+              </p>
+            </div>
+
+            <div class="bg-surface p-6 rounded-xl border border-bordercol md:col-span-2">
+              <h3 class="font-serif text-lg font-semibold text-ink mb-1">Confusion Matrix</h3>
+              <p class="text-sm text-muted leading-relaxed">
+                A 2x2 contingency grid comparing True Labels versus Predicted Labels (True Positives, False Positives, True Negatives, False Negatives), exposing directional bias.
+              </p>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- 6. DATASET & LIMITATIONS -->
+        <div class="space-y-6 pb-12 border-b border-bordercol">
+          <div>
+            <span class="text-xs font-mono uppercase tracking-wider text-petrol font-semibold">06 / Scope & Limitations</span>
+            <h2 class="font-serif text-2xl sm:text-3xl font-semibold text-ink mt-1">Dataset Origin & Ethical Boundaries</h2>
+          </div>
+
+          <div class="bg-surface rounded-2xl border border-bordercol p-6 sm:p-8 space-y-4 text-muted text-sm sm:text-base leading-relaxed">
+            <p>
+              The training pipeline was trained upon a publicly accessible benchmark dataset contrasting verified consumer product reviews (Original) against algorithmic text generator reviews (Computer-Generated). 
+            </p>
+            <p>
+              Because language generation constantly evolves, lexical n-grams (TF-IDF) identify statistical vocabulary density rather than verifying semantic ground truth or physical purchase records. Consequently, all system results are explicitly presented as <strong class="text-petrol font-medium">Likely Genuine</strong> or <strong class="text-amber font-medium">Potentially Fake</strong>, reinforcing that ML predictions serve as advisory signals rather than absolute determinations.
+            </p>
+          </div>
+        </div>
+
+        <!-- 7. TECHNOLOGY STACK CHIPS -->
+        <div class="space-y-6 pb-12 border-b border-bordercol">
+          <div>
+            <span class="text-xs font-mono uppercase tracking-wider text-petrol font-semibold">07 / Stack</span>
+            <h2 class="font-serif text-2xl font-semibold text-ink mt-1">Core Technologies</h2>
+          </div>
+
+          <div class="flex flex-wrap items-center gap-3">
+            <div class="px-4 py-2.5 rounded-xl bg-surface border border-bordercol text-sm font-mono text-ink shadow-xs">
+              <span class="text-petrol font-semibold">Python</span> 3.10+
+            </div>
+            <div class="px-4 py-2.5 rounded-xl bg-surface border border-bordercol text-sm font-mono text-ink shadow-xs">
+              <span class="text-petrol font-semibold">scikit-learn</span> (LinearSVC, LogisticRegression, MultinomialNB)
+            </div>
+            <div class="px-4 py-2.5 rounded-xl bg-surface border border-bordercol text-sm font-mono text-ink shadow-xs">
+              <span class="text-petrol font-semibold">pandas</span> (Corpus cleansing & stratification)
+            </div>
+            <div class="px-4 py-2.5 rounded-xl bg-surface border border-bordercol text-sm font-mono text-ink shadow-xs">
+              <span class="text-amber font-semibold">TF-IDF</span> (TfidfVectorizer, 30k max features, n-gram range 1-2)
+            </div>
+            <div class="px-4 py-2.5 rounded-xl bg-surface border border-bordercol text-sm font-mono text-ink shadow-xs">
+              <span class="text-ink font-semibold">Streamlit</span> (Interactive web app runtime)
+            </div>
+          </div>
+        </div>
+
+        <!-- Bottom Action CTA -->
+        <div class="text-center pt-4">
+          <p class="text-muted text-sm mb-4">Ready to test the classifier on real customer review text?</p>
+          <button onclick="navigateTo('analyze')" class="px-8 py-3.5 rounded-lg bg-petrol text-white font-medium text-base shadow-sm hover:bg-petrol-dark transition-all">
+            Launch Analyze Review
+          </button>
+        </div>
+
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ========================================== -->
+  <!-- GLOBAL FOOTER                              -->
+  <!-- ========================================== -->
+  <footer class="bg-surface border-t border-bordercol py-12 mt-auto">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-6">
+      
+      <!-- Brand & Copyright -->
+      <div class="flex items-center gap-3">
+        <div class="w-8 h-8 rounded-md bg-petrol flex items-center justify-center text-white">
+          <svg class="w-4 h-4 text-ivory" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 2L3 7v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-9-5z"/>
+          </svg>
+        </div>
+        <div class="text-xs text-muted">
+          <span class="font-serif font-bold text-ink text-sm">ReviewTrellis</span> — Supervised ML Review Authenticity Verification
+        </div>
+      </div>
+
+      <!-- Links -->
+      <div class="flex items-center space-x-6 text-xs text-muted font-medium">
+        <button onclick="navigateTo('home')" class="hover:text-ink transition-colors">Home</button>
+        <button onclick="navigateTo('analyze')" class="hover:text-ink transition-colors">Analyze Review</button>
+        <button onclick="navigateTo('about')" class="hover:text-ink transition-colors">About Project</button>
+      </div>
+
+    </div>
+  </footer>
+
+  <!-- ========================================== -->
+  <!-- CLIENT-SIDE APPLICATION LOGIC              -->
+  <!-- ========================================== -->
+  <script>
+    document.querySelectorAll('[data-metric-width]').forEach(bar => {
+      const width = Number(bar.dataset.metricWidth);
+      if (Number.isFinite(width) && width >= 0 && width <= 100) {
+        bar.style.width = `${width}%`;
+      }
+    });
+
+    // State management
+    let activePage = 'home';
+    let currentReviewText = '';
+
+    // Navigation function
+    function navigateTo(pageId) {
+      // Hide all pages
+      document.querySelectorAll('.page-view').forEach(p => p.classList.remove('active'));
+      
+      // Show target page
+      const targetPage = document.getElementById('page-' + pageId);
+      if (targetPage) {
+        targetPage.classList.add('active');
+        activePage = pageId;
+      }
+
+      // Update Nav buttons
+      document.querySelectorAll('.nav-btn').forEach(btn => {
+        const ind = btn.querySelector('.nav-indicator');
+        if (btn.id === 'nav-btn-' + pageId) {
+          btn.classList.remove('text-muted');
+          btn.classList.add('text-ink');
+          if (ind) ind.classList.remove('opacity-0');
+        } else {
+          btn.classList.remove('text-ink');
+          btn.classList.add('text-muted');
+          if (ind) ind.classList.add('opacity-0');
+        }
+      });
+
+      // Scroll to top
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function toggleMobileNav() {
+      const mob = document.getElementById('mobile-nav');
+      mob.classList.toggle('hidden');
+    }
+
+    // Input handlers
+    function handleTextInput(el) {
+      const text = el.value;
+      const charCount = text.length;
+      const wordCount = text.trim() === '' ? 0 : text.trim().split(/\s+/).length;
+
+      document.getElementById('char-counter').textContent = `${charCount} characters`;
+      document.getElementById('word-counter').textContent = `${wordCount} words`;
+      const errorBox = document.getElementById('analyze-error');
+      if (text.trim().length > 0 && errorBox.textContent === 'Please enter a product review.') {
+        errorBox.classList.add('hidden');
+      }
+    }
+
+    function clearTextInput() {
+      const el = document.getElementById('review-textarea');
+      el.value = '';
+      document.getElementById('analyze-error').classList.add('hidden');
+      handleTextInput(el);
+      el.focus();
+    }
+
+    async function triggerAnalyze() {
+      const el = document.getElementById('review-textarea');
+      const errorBox = document.getElementById('analyze-error');
+      currentReviewText = el.value.trim();
+      if (!currentReviewText) {
+        errorBox.textContent = 'Please enter a product review.';
+        errorBox.classList.remove('hidden');
+        el.focus();
+        return;
+      }
+
+      const analyzeButton = document.getElementById('btn-analyze');
+      errorBox.classList.add('hidden');
+      analyzeButton.disabled = true;
+      document.getElementById('analyze-state-input').classList.add('hidden');
+      document.getElementById('analyze-state-result').classList.add('hidden');
+      document.getElementById('analyze-state-loading').classList.remove('hidden');
+
+      try {
+        const response = await fetch('/api/predict', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ review: currentReviewText })
+        });
+        const responseBody = await response.text();
+        if (!responseBody.trim()) {
+          throw new Error(
+            `The analysis service returned an empty response (HTTP ${response.status}). ` +
+            'Start Flask and open the site at http://127.0.0.1:5000.'
+          );
+        }
+
+        const contentType = response.headers.get('content-type') || '';
+        if (!contentType.toLowerCase().includes('application/json')) {
+          throw new Error(
+            `The page at ${window.location.origin} returned a non-JSON response. ` +
+            'Open the Flask site at http://127.0.0.1:5000 instead of using Streamlit, Live Server, or a file URL.'
+          );
+        }
+
+        let result;
+        try {
+          result = JSON.parse(responseBody);
+        } catch {
+          throw new Error(
+            'The analysis service returned invalid JSON. Check that Flask is running at http://127.0.0.1:5000.'
+          );
+        }
+        if (!response.ok) {
+          throw new Error(
+            typeof result.message === 'string'
+              ? result.message
+              : typeof result.error === 'string'
+                ? result.error
+              : `The review could not be analyzed (HTTP ${response.status}).`
+          );
+        }
+        if (
+          !result ||
+          result.success !== true ||
+          !['genuine', 'fake'].includes(result.predicted_label) ||
+          typeof result.message !== 'string' ||
+          !Number.isInteger(result.characters) ||
+          !Number.isInteger(result.words) ||
+          typeof result.model !== 'string'
+        ) {
+          throw new Error('The analysis service returned an incomplete prediction.');
+        }
+
+        renderResult(result);
+        document.getElementById('analyze-state-loading').classList.add('hidden');
+        document.getElementById('analyze-state-result').classList.remove('hidden');
+      } catch (error) {
+        document.getElementById('analyze-state-loading').classList.add('hidden');
+        document.getElementById('analyze-state-input').classList.remove('hidden');
+        errorBox.textContent = error instanceof TypeError
+          ? 'Unable to reach the prediction API. Start Flask and open the site at http://127.0.0.1:5000.'
+          : error instanceof Error
+            ? error.message
+            : 'Unable to reach the review analysis service. Please try again.';
+        errorBox.classList.remove('hidden');
+      } finally {
+        analyzeButton.disabled = false;
+        handleTextInput(el);
+      }
+    }
+
+    function renderResult(result) {
+      if (result.predicted_label !== 'genuine' && result.predicted_label !== 'fake') {
+        throw new Error('The analysis service returned an invalid prediction.');
+      }
+      const isGenuine = result.predicted_label === 'genuine';
+      const card = document.getElementById('result-card');
+      const iconContainer = document.getElementById('result-icon-container');
+      const labelEl = document.getElementById('result-label');
+      const quotedEl = document.getElementById('result-quoted-text');
+      const charsEl = document.getElementById('result-meta-chars');
+      const wordsEl = document.getElementById('result-meta-words');
+      const modelEl = document.getElementById('result-meta-model');
+
+      quotedEl.textContent = currentReviewText;
+      charsEl.textContent = `${result.characters} chars`;
+      wordsEl.textContent = `${result.words} words`;
+      modelEl.textContent = result.model;
+
+      if (isGenuine) {
+        card.style.borderColor = '#1F4E5F';
+        card.style.backgroundColor = '#FFFFFF';
+        iconContainer.className = 'w-12 h-12 rounded-xl flex items-center justify-center bg-petrol-light text-petrol';
+        iconContainer.innerHTML = `
+          <svg class="w-6 h-6 text-petrol" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+          </svg>
+        `;
+        labelEl.textContent = result.message;
+        labelEl.className = 'font-serif text-2xl sm:text-3xl font-bold tracking-tight text-petrol';
+      } else {
+        card.style.borderColor = '#D98E32';
+        card.style.backgroundColor = '#FFFFFF';
+        iconContainer.className = 'w-12 h-12 rounded-xl flex items-center justify-center bg-amber-light text-amber';
+        iconContainer.innerHTML = `
+          <svg class="w-6 h-6 text-amber" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            <line x1="11" y1="8" x2="11" y2="11"></line>
+            <circle cx="11" cy="14" r="0.75" fill="currentColor"></circle>
+          </svg>
+        `;
+        labelEl.textContent = result.message;
+        labelEl.className = 'font-serif text-2xl sm:text-3xl font-bold tracking-tight text-amber';
+      }
+    }
+
+    // Reset back to State A (Clear input and return to State A)
+    function resetToInputState(clear = true) {
+      document.getElementById('analyze-state-loading').classList.add('hidden');
+      document.getElementById('analyze-state-result').classList.add('hidden');
+      document.getElementById('analyze-state-input').classList.remove('hidden');
+      if (clear) {
+        clearTextInput();
+      }
+    }
+  </script>
+</body>
+</html>
