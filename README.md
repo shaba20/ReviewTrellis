@@ -43,10 +43,14 @@
 
 ## 📸 Website Preview
 
-![ReviewTrellis Website](screenshots/homepage.png)
+### 🔍 Review Analysis with Explanation
+![Review Analysis](screenshots/homepage.png)
 
-> Save your website screenshot as `screenshots/homepage.png` so it appears here on GitHub.
+### 🧭 How It Works
+![How It Works](screenshots/how-it-works.png)
 
+### 📊 Model Comparison
+![Model Comparison](screenshots/model-comparison.png)
 ---
 
 ## 📌 Project Overview
