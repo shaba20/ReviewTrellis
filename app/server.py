@@ -5,7 +5,7 @@ from pathlib import Path
 from flask import Flask, jsonify, render_template, request
 from werkzeug.exceptions import HTTPException
 
-from src.predict import clean_review, predict_review
+from src.predict import clean_review, explain_review
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -144,15 +144,15 @@ def predict():
     if not clean_review(review):
         return api_error_response("Please enter valid review text.", 400)
 
-    prediction = predict_review(review)
-    predicted_label = "genuine" if prediction == 0 else "fake"
-    message = (
-        "Likely Genuine Review"
-        if predicted_label == "genuine"
-        else "Likely Fake Review"
-    )
+    analysis = explain_review(review)
+    predicted_label = analysis["predicted_label"]
+    message = analysis["prediction"]
     return jsonify({
         "success": True,
+        "prediction": analysis["prediction"],
+        "confidence": analysis["confidence"],
+        "reasons": analysis["reasons"],
+        "detected_indicators": analysis["detected_indicators"],
         "predicted_label": predicted_label,
         "message": message,
         "label": predicted_label,

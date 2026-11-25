@@ -40,6 +40,9 @@ The project follows a complete Machine Learning workflow:
 7. **Best Model Selection** – Select the best-performing model based on evaluation results.
 8. **Web Application Integration** – Connect the trained model with the website.
 9. **Review Prediction** – Allow users to submit a review and receive a prediction.
+10. **Prediction Explanation** – Show review-specific TF-IDF feature contributions and detected writing-style cues alongside each result.
+
+The current Linear SVM does not provide calibrated class probabilities, so the site reports **Prediction confidence unavailable** instead of presenting its decision score as a confidence percentage. Explanations identify signals in the text and do not establish whether a review is authentic.
 
 ---
 

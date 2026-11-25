@@ -24,6 +24,10 @@ class ReviewApiTests(unittest.TestCase):
         )
         self.assertNotIn("Sample Presets:", html)
         self.assertIn('id="review-textarea"', html)
+        self.assertIn("Why this prediction?", html)
+        self.assertIn('id="result-confidence"', html)
+        self.assertIn('id="result-reasons"', html)
+        self.assertIn('id="result-indicators"', html)
 
     def test_live_server_template_redirects_to_flask(self):
         response = self.client.get("/")
@@ -93,16 +97,94 @@ class ReviewApiTests(unittest.TestCase):
         self.assertIn("application/json", response.headers["Content-Type"])
         result = response.get_json()
         self.assertTrue(result["success"])
+        self.assertIn(result["prediction"], {"Likely Genuine", "Likely Fake"})
+        self.assertIsNone(result["confidence"])
+        self.assertGreaterEqual(len(result["reasons"]), 2)
+        self.assertLessEqual(len(result["reasons"]), 3)
+        self.assertIsInstance(result["detected_indicators"], list)
         self.assertIn(result["predicted_label"], {"genuine", "fake"})
         expected_result = (
-            "Likely Genuine Review"
+            "Likely Genuine"
             if result["predicted_label"] == "genuine"
-            else "Likely Fake Review"
+            else "Likely Fake"
         )
         self.assertEqual(result["message"], expected_result)
         self.assertEqual(result["characters"], len(review))
         self.assertEqual(result["words"], len(review.split()))
         self.assertEqual(result["model"], "Linear SVM")
+
+    def test_promotional_review_returns_frontend_prediction_contract(self):
+        review = (
+            "This is an absolutely amazing product! The outstanding quality and "
+            "exceptional performance make it the perfect choice for everyone. "
+            "Highly recommended!"
+        )
+        response = self.client.post("/api/predict", json={"review": review})
+
+        self.assertEqual(response.status_code, 200)
+        result = response.get_json()
+        self.assertTrue(result["success"])
+        self.assertIn(result["prediction"], {"Likely Genuine", "Likely Fake"})
+        self.assertIsNone(result["confidence"])
+        self.assertIsInstance(result["reasons"], list)
+        self.assertGreaterEqual(len(result["reasons"]), 2)
+        self.assertTrue(all(isinstance(reason, str) for reason in result["reasons"]))
+        self.assertIsInstance(result["detected_indicators"], list)
+        self.assertTrue(
+            all(isinstance(indicator, str) for indicator in result["detected_indicators"])
+        )
+
+    def test_explanations_cover_varied_review_styles_without_forcing_labels(self):
+        reviews = (
+            "Buy this amazing product now! Best ever. Highly recommend!",
+            (
+                "This incredible, perfect product is absolutely amazing and the best "
+                "thing ever. Buy it now, you will love it! I highly recommend it to "
+                "everyone because it is fantastic, flawless, and wonderful."
+            ),
+            "I use this kettle daily; it heats water quickly.",
+            (
+                "I bought this kettle three weeks ago and use it every morning. It "
+                "heats water quickly, although the lid feels flimsy and the handle "
+                "gets warm. It is useful for tea, but I wish it held more water."
+            ),
+            (
+                "I have used these headphones for two months. The sound is great, "
+                "but the fit is uncomfortable after an hour. Battery life lasts "
+                "about 8 hours, which works for my commute, though the case is bulky."
+            ),
+        )
+        results = []
+
+        for review in reviews:
+            with self.subTest(review=review[:40]):
+                response = self.client.post("/api/predict", json={"review": review})
+                self.assertEqual(response.status_code, 200)
+                result = response.get_json()
+                self.assertIn(result["prediction"], {"Likely Genuine", "Likely Fake"})
+                self.assertIsNone(result["confidence"])
+                self.assertGreaterEqual(len(result["reasons"]), 2)
+                self.assertLessEqual(len(result["reasons"]), 3)
+                self.assertIsInstance(result["detected_indicators"], list)
+                results.append(result)
+
+        self.assertTrue(
+            any("Promotional or emphatic praise" in indicator
+                for indicator in results[0]["detected_indicators"])
+        )
+        self.assertTrue(
+            any("First-person wording" in indicator
+                for indicator in results[2]["detected_indicators"])
+        )
+        self.assertTrue(
+            any("Mixed opinion" in indicator
+                for result in results[3:]
+                for indicator in result["detected_indicators"])
+        )
+        self.assertGreater(
+            len({tuple(result["reasons"]) for result in results}),
+            1,
+        )
 
     def test_predict_rejects_empty_or_non_text_reviews(self):
         for payload in ({"review": "  "}, {"review": "<b></b>"}, {"review": 42}, {}):

@@ -717,6 +717,24 @@
               </div>
             </div>
 
+            <section class="py-6 border-b border-bordercol" aria-labelledby="explanation-title">
+              <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+                <div>
+                  <h3 id="explanation-title" class="font-serif text-xl font-semibold text-ink">Why this prediction?</h3>
+                  <p class="text-sm text-muted mt-1">Review-specific language and model signals—not proof of authenticity.</p>
+                </div>
+                <div class="sm:text-right">
+                  <span class="text-[11px] font-mono uppercase tracking-wider text-muted block">Model confidence</span>
+                  <span id="result-confidence" class="text-sm font-semibold text-ink">Prediction confidence unavailable.</span>
+                </div>
+              </div>
+              <ul id="result-reasons" class="mt-4 space-y-2 text-sm text-ink list-disc pl-5"></ul>
+              <div class="mt-4">
+                <span class="text-[11px] font-mono uppercase tracking-wider text-muted block mb-2">Detected writing-style indicators</span>
+                <div id="result-indicators" class="flex flex-wrap gap-2"></div>
+              </div>
+            </section>
+
             <!-- Important ML Disclaimer Note -->
             <div class="pt-6 flex items-start gap-3 text-xs text-muted leading-relaxed">
               <svg class="w-5 h-5 text-muted shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
@@ -1094,7 +1112,7 @@
               <span class="text-amber font-semibold">TF-IDF</span> (TfidfVectorizer, 30k max features, n-gram range 1-2)
             </div>
             <div class="px-4 py-2.5 rounded-xl bg-surface border border-bordercol text-sm font-mono text-ink shadow-xs">
-              <span class="text-ink font-semibold">Streamlit</span> (Interactive web app runtime)
+              <span class="text-ink font-semibold">Flask</span> (Lightweight Python web framework serving the model and pages)
             </div>
           </div>
         </div>
@@ -1272,8 +1290,19 @@
         if (
           !result ||
           result.success !== true ||
+          !['Likely Genuine', 'Likely Fake'].includes(result.prediction) ||
           !['genuine', 'fake'].includes(result.predicted_label) ||
           typeof result.message !== 'string' ||
+          !(result.confidence === null || (
+            typeof result.confidence === 'number' &&
+            Number.isFinite(result.confidence) &&
+            result.confidence >= 0 &&
+            result.confidence <= 1
+          )) ||
+          !Array.isArray(result.reasons) ||
+          !result.reasons.every(reason => typeof reason === 'string') ||
+          !Array.isArray(result.detected_indicators) ||
+          !result.detected_indicators.every(indicator => typeof indicator === 'string') ||
           !Number.isInteger(result.characters) ||
           !Number.isInteger(result.words) ||
           typeof result.model !== 'string'
@@ -1300,10 +1329,10 @@
     }
 
     function renderResult(result) {
-      if (result.predicted_label !== 'genuine' && result.predicted_label !== 'fake') {
+      if (result.prediction !== 'Likely Genuine' && result.prediction !== 'Likely Fake') {
         throw new Error('The analysis service returned an invalid prediction.');
       }
-      const isGenuine = result.predicted_label === 'genuine';
+      const isGenuine = result.prediction === 'Likely Genuine';
       const card = document.getElementById('result-card');
       const iconContainer = document.getElementById('result-icon-container');
       const labelEl = document.getElementById('result-label');
@@ -1316,6 +1345,25 @@
       charsEl.textContent = `${result.characters} chars`;
       wordsEl.textContent = `${result.words} words`;
       modelEl.textContent = result.model;
+      document.getElementById('result-confidence').textContent =
+        result.confidence === null
+          ? 'Prediction confidence unavailable.'
+          : `${(result.confidence * 100).toFixed(1)}%`;
+      const reasonsList = document.getElementById('result-reasons');
+      reasonsList.replaceChildren();
+      result.reasons.slice(0, 3).forEach(reason => {
+        const item = document.createElement('li');
+        item.textContent = reason;
+        reasonsList.appendChild(item);
+      });
+      const indicatorsContainer = document.getElementById('result-indicators');
+      indicatorsContainer.replaceChildren();
+      result.detected_indicators.forEach(indicator => {
+        const item = document.createElement('span');
+        item.className = 'inline-flex items-center rounded-full border border-bordercol bg-ivory/50 px-3 py-1 text-xs text-muted';
+        item.textContent = indicator;
+        indicatorsContainer.appendChild(item);
+      });
 
       if (isGenuine) {
         card.style.borderColor = '#1F4E5F';
@@ -1326,7 +1374,7 @@
             <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
           </svg>
         `;
-        labelEl.textContent = result.message;
+        labelEl.textContent = result.prediction;
         labelEl.className = 'font-serif text-2xl sm:text-3xl font-bold tracking-tight text-petrol';
       } else {
         card.style.borderColor = '#D98E32';
@@ -1340,7 +1388,7 @@
             <circle cx="11" cy="14" r="0.75" fill="currentColor"></circle>
           </svg>
         `;
-        labelEl.textContent = result.message;
+        labelEl.textContent = result.prediction;
         labelEl.className = 'font-serif text-2xl sm:text-3xl font-bold tracking-tight text-amber';
       }
     }
